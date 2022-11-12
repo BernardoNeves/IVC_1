@@ -13,8 +13,11 @@ center = (0,0)
 
 #Start video capture
 video_capture = cv2.VideoCapture(0)
+ret, frame = video_capture.read()
+frame = cv2.flip(frame,1)
 
 def cam():
+    global frame
     if not video_capture.isOpened():
         video_capture.open(0)
     #Store the readed frame in frame, ret defines return value
@@ -62,7 +65,23 @@ def cam():
             
     #Show the output frame
     cv2.imshow('Frame', frame)
+    cv2.setMouseCallback('Frame',mouseTreshold)
 
+def mouseTreshold(event,x,y,flags,param):
+    global thresholdLower
+    global thresholdUpper
+
+    if event == cv2.EVENT_LBUTTONDOWN: #checks mouse left button down condition
+        # convert rgb to hsv format
+        colorsHSV = cv2.cvtColor(np.uint8([[[frame[y,x,0] ,frame[y,x,1],frame[y,x,2] ]]]),cv2.COLOR_BGR2HSV)
+        
+        # create a treshold based on the color values
+        tempLower = colorsHSV[0][0][0]  - 10, 100, 100
+        tempUpper = colorsHSV[0][0][0] + 10, 255, 255
+        
+        # set the threshold
+        thresholdLower = np.array(tempLower)
+        thresholdUpper = np.array(tempUpper)
 
 def main():
     while(1):
