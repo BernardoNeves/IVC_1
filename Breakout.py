@@ -1,5 +1,19 @@
 import tkinter as tk
+import cv2
+import numpy as np
+from collections import deque
+import time
+import math
 
+#Define HSV colour range for green colour objects
+greenLower = (29, 86, 6)
+greenUpper = (64, 255, 255)
+
+# greenLower = (160,100,20)
+# greenUpper = (179,255,255)
+
+#Start video capture
+video_capture = cv2.VideoCapture(0)
 
 class GameObject(object):
     def __init__(self, canvas, item):
@@ -80,7 +94,12 @@ class Paddle(GameObject):
             super(Paddle, self).move(offset, 0)
             if self.ball is not None:
                 self.ball.move(offset, 0)
-
+    
+    def move_to(self, offset):
+        coords = self.get_position()
+        width = self.canvas.winfo_width()
+        if coords[0] + offset >= 0 and coords[2] + offset <= width:
+            super(Paddle, self).move(offset, 0)
 
 class Brick(GameObject):
     COLORS = {1: '#4535AA', 2: '#ED639E', 3: '#8FE1A2'}
@@ -127,11 +146,9 @@ class Game(tk.Frame):
             self.add_brick(x + 37.5, 50, 3)
             self.add_brick(x + 37.5, 70, 2)
             self.add_brick(x + 37.5, 90, 1)
-
         self.hud = None
         self.setup_game()
         self.canvas.focus_set()
-        # ! Controls
         self.canvas.bind('<Left>',
                          lambda _: self.paddle.move(-10))
         self.canvas.bind('<Right>',
@@ -175,6 +192,64 @@ class Game(tk.Frame):
         self.game_loop()
 
     def game_loop(self):
+        # ------------------
+        if not video_capture.isOpened():
+                video_capture.open(0)
+        #Store the readed frame in frame, ret defines return value
+        ret, frame = video_capture.read()
+        #Flip the frame to avoid mirroring effect
+        frame = cv2.flip(frame,1)
+        #Blur the frame using Gaussian Filter of kernel size 5, to remove excessivve noise
+        blurred_frame = cv2.GaussianBlur(frame, (5,5), 0)
+        #Convert the frame to HSV, as HSV allow better segmentation.
+        hsv_converted_frame = cv2.cvtColor(blurred_frame, cv2.COLOR_BGR2HSV)
+
+        #Create a mask for the frame, showing green values
+        mask = cv2.inRange(hsv_converted_frame, greenLower, greenUpper)
+        #Erode the masked output to delete small white dots present in the masked image
+        mask = cv2.erode(mask, None, iterations = 5)
+        #Dilate the resultant image to restore our target
+        mask = cv2.dilate(mask, None, iterations = 5)
+
+        #Display the masked output in a different window
+        cv2.imshow('Masked Output', mask)
+
+        #Find all contours in the masked image
+        cnts,_ = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        #Define center of the ball to be detected as None
+        center = None
+
+        #If any object is detected, then only proceed
+        if(len(cnts)) > 0:
+            #Find the contour with maximum area
+            c = max(cnts, key = cv2.contourArea)
+            #Find the center of the circle, and its radius of the largest detected contour.
+            ((x,y), radius) = cv2.minEnclosingCircle(c)
+
+            #Calculate the centroid of the ball, as we need to draw a circle around it.
+            M = cv2.moments(c)
+            center = (int(M['m10'] / M['m00']), int(M['m01'] / M['m00']))
+
+            #Proceed only if a ball of considerable size is detected
+            if radius > 0:
+                #Draw circles around the object as well as its centre
+                cv2.circle(frame, (int(x), int(y)), int(radius), (0,255,255), 2)
+                cv2.circle(frame, center, 5, (0,255,255), -1)
+
+            coords = self.paddle.get_position()
+            offset = 0
+            if center[0] < coords[0] - 10:
+                offset = -10
+            elif center[0] > coords[0] + 10:
+                offset = 10
+
+            self.paddle.move(offset)
+                
+        #Show the output frame
+        cv2.imshow('Frame', frame)
+        # ------------------
+        
         self.check_collisions()
         num_bricks = len(self.canvas.find_withtag('brick'))
         if num_bricks == 0:
@@ -199,7 +274,10 @@ class Game(tk.Frame):
 
 
 if __name__ == '__main__':
+    time.sleep(2)
     root = tk.Tk()
     root.title('Break those Bricks!')
     game = Game(root)
     game.mainloop()
+    video_capture.release()
+    cv2.destroyAllWindows()
