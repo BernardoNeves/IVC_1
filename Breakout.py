@@ -182,16 +182,12 @@ class Game(tk.Frame):
         self.game_loop()
 
     def game_loop(self):
-        Cam.cam()
-        if Cam.center != None:
-            coords = self.paddle.get_position()
-            offset = 0
-            if Cam.center[0] < coords[0] - 10:
-                offset = -10
-            elif Cam.center[0] > coords[0] + 10:
-                offset = 10
+        object_coords = Cam.cam()
+        if object_coords != None:
+            paddle_coords = self.paddle.get_position()
+            offset = object_coords[0] - paddle_coords[0]
             self.paddle.move(offset)
-        
+
         self.check_collisions()
         num_bricks = len(self.canvas.find_withtag('brick'))
         if num_bricks == 0:
